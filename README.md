@@ -71,7 +71,6 @@ The bot requires the following permissions to function properly:
 - Use Slash Commands *(optional, for future use)*
 - Administrator *(required to correctly set the `is_admin` flag in the payload)*
 
----
 
 ## How It Works
 
@@ -82,7 +81,6 @@ The bot requires the following permissions to function properly:
   - A message permalink
 - The bot sends this data to the `WEBHOOK_URL` you define as a POST request
 
----
 
 ## Setup
 
@@ -92,7 +90,7 @@ The bot requires the following permissions to function properly:
 4. Invite the bot to your server using the invite link shown in the logs
 5. In n8n, create an POST HTTP Webhook trigger to receive and handle payloads
 
----
+
 
 ## Use Cases
 
@@ -102,6 +100,16 @@ The bot requires the following permissions to function properly:
 - Integrate chat-based workflows with memory and logic layers
 
 ---
+
+## ⚠️ Danger: Webhook Security Warning
+
+> **⚠️ This bot is intended to run in personal or internal environments only.**
+
+If you are deploying this bot in a **public cloud**, or if your `n8n` instance is **exposed to the internet**, please be aware of the following **security risk**:
+
+- The bot sends webhook payloads **without authentication** by default.
+- If someone discovers your webhook URL, they could **send arbitrary payloads** to your `n8n` workflows.
+- This could result in unauthorized actions, prompt injection, or even service abuse, depending on your workflow logic.
 
 ## Built With AI
 
