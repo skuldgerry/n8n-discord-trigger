@@ -17,7 +17,7 @@ Version 2.0.0 requires an Authorization Bearer token on every webhook request.
 Generate a 256-bit token in the required `sk-` format:
 
 ```bash
-python -c "import secrets; print('sk-' + secrets.token_hex(32))"
+python3 -c "import secrets; print('sk-' + secrets.token_hex(32))"
 ```
 
 If OpenSSL is available, the equivalent command is:
@@ -29,15 +29,22 @@ If OpenSSL is available, the equivalent command is:
 The generated token contains the `sk-` prefix followed by exactly 64 lowercase
 hexadecimal characters: 67 characters total.
 
-In the n8n Webhook node:
+In the n8n Webhook node, configure the credential exactly as follows:
 
 1. Set **Authentication** to **Header Auth**.
 2. Create a Header Auth credential.
-3. Set the header name to `Authorization`.
-4. Set the header value to `Bearer ` followed by the generated token.
+3. Use these credential fields:
 
-For example, if `WEBHOOK_TOKEN` is `sk-<generated-secret>`, the n8n credential
-value is `Bearer sk-<generated-secret>`. Always send the webhook over HTTPS.
+   | Field | Value |
+   | --- | --- |
+   | Name | `Authorization` |
+   | Value | `Bearer <your complete WEBHOOK_TOKEN>` |
+
+> `Bearer` and the single space after it are required. If `WEBHOOK_TOKEN` is
+> `sk-<generated-secret>`, the complete credential value is
+> `Bearer sk-<generated-secret>`, not just `sk-<generated-secret>`.
+
+Always send the webhook over HTTPS.
 
 ## Docker Compose
 
@@ -69,6 +76,29 @@ public Compose file. Use your deployment platform's secret management.
 The bot only needs **View Channels** for its trigger path. It does not need
 Administrator permission to determine whether the message author is an
 administrator.
+
+### Retrieve the invite URL
+
+At startup, the bot logs its invite URL and writes it to
+`/tmp/n8n-discord-trigger-invite-url.txt` inside the running container. This
+file remains available if old Docker log entries rotate away.
+
+Retrieve it at any time without restarting the bot:
+
+```bash
+docker exec n8n-discord-trigger \
+  cat /tmp/n8n-discord-trigger-invite-url.txt
+```
+
+With Docker Compose, the equivalent command is:
+
+```bash
+docker compose exec n8n-discord-trigger \
+  cat /tmp/n8n-discord-trigger-invite-url.txt
+```
+
+The invite URL contains the public Discord application ID, not the bot token.
+If the container is recreated, the bot writes the file again when it connects.
 
 ## Payload
 
@@ -107,11 +137,12 @@ administrator.
 | `WEBHOOK_URL` | Yes | — | Production n8n webhook URL |
 | `WEBHOOK_TOKEN` | Yes | — | `sk-` followed by exactly 64 lowercase hex characters |
 | `WEBHOOK_TIMEOUT_SECONDS` | No | `10` | Total HTTP request timeout |
+| `INVITE_URL_FILE` | No | `/tmp/n8n-discord-trigger-invite-url.txt` | File used to retain the public Discord invite URL |
 
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v
+python3 -m unittest discover -s tests -v
 ```
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and

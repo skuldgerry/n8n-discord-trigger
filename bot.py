@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from invite import build_invite_url, write_invite_url
 from trigger_logic import (
     clean_message_content,
     is_guild_admin,
@@ -22,6 +23,10 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBHOOK_TOKEN = os.getenv("WEBHOOK_TOKEN")
+INVITE_URL_FILE = os.getenv(
+    "INVITE_URL_FILE",
+    "/tmp/n8n-discord-trigger-invite-url.txt",
+)
 try:
     WEBHOOK_TIMEOUT_SECONDS = float(
         os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10")
@@ -51,12 +56,17 @@ async def on_ready():
         bot.user,
         bot.user.id,
     )
-    invite_link = discord.utils.oauth_url(
-        bot.user.id,
-        permissions=discord.Permissions(view_channel=True),
-        scopes=("bot",),
-    )
+    invite_link = build_invite_url(bot.user.id)
     logger.info("Invite the bot using this link:\n%s", invite_link)
+    try:
+        destination = write_invite_url(INVITE_URL_FILE, invite_link)
+        logger.info("Invite URL saved to %s", destination)
+    except OSError as error:
+        logger.warning(
+            "Could not save invite URL to %s: %s",
+            INVITE_URL_FILE,
+            type(error).__name__,
+        )
 
 
 @bot.event

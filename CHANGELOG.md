@@ -18,6 +18,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Regression tests for direct bot mentions, `@here`, `@everyone`, authentication,
   content cleanup, admin detection, and HTTP errors.
 - A documented release and versioning strategy.
+- Persistent access to the public Discord invite URL through
+  `/tmp/n8n-discord-trigger-invite-url.txt` inside the running container.
 
 ### Changed
 
@@ -29,6 +31,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Stop logging message contents and complete webhook payloads.
 - Use least-privilege Discord invite permissions.
 - Pin Python dependencies and run the container as a non-root user.
+- Clarify that the n8n Header Auth value must include `Bearer ` and switch
+  documented Python commands to `python3`.
 
 ### Security
 

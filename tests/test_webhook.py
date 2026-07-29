@@ -69,7 +69,7 @@ class WebhookTests(unittest.IsolatedAsyncioTestCase):
             {AUTH_HEADER: f"Bearer {VALID_TOKEN}"},
         )
 
-    def test_token_without_sk_dash_prefix_is_rejected(self):
+    def test_token_without_required_prefix_is_rejected(self):
         with self.assertRaises(ValueError):
             build_auth_headers("a" * TOKEN_SECRET_HEX_LENGTH)
 
