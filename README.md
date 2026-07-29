@@ -1,32 +1,121 @@
 # n8n Discord Trigger
 
-A lightweight Discord bot that triggers n8n workflows when mentioned in a server or sent a direct message. Sends detailed payloads including user, message, channel, and guild info — with admin status detection built-in.
+A lightweight Discord bot that triggers n8n workflows when the bot is explicitly
+mentioned in a server or sent a direct message.
 
-## Features
+## Trigger behavior
 
-- Webhook trigger for n8n when bot is mentioned or DMed
-- Works across multiple servers
-- Includes full metadata (user, channel, guild, message link, etc.)
-- Adds `is_admin` flag for context-aware workflows
+- A direct mention of the bot in a guild triggers the webhook.
+- `@here` and `@everyone` do not trigger the webhook.
+- Mentioning another user does not trigger the webhook.
+- Direct messages to the bot continue to trigger the webhook.
 
-## Payload Example
+## n8n authentication
 
-Here’s what the bot sends to your n8n webhook:
+Version 2.0.0 requires an Authorization Bearer token on every webhook request.
+
+Generate a 256-bit token in the required `sk-` format:
+
+```bash
+python3 -c "import secrets; print('sk-' + secrets.token_hex(32))"
+```
+
+If OpenSSL is available, the equivalent command is:
+
+```powershell
+"sk-$(openssl rand -hex 32)"
+```
+
+The generated token contains the `sk-` prefix followed by exactly 64 lowercase
+hexadecimal characters: 67 characters total.
+
+In the n8n Webhook node, configure the credential exactly as follows:
+
+1. Set **Authentication** to **Header Auth**.
+2. Create a Header Auth credential.
+3. Use these credential fields:
+
+   | Field | Value |
+   | --- | --- |
+   | Name | `Authorization` |
+   | Value | `Bearer <your complete WEBHOOK_TOKEN>` |
+
+> `Bearer` and the single space after it are required. If `WEBHOOK_TOKEN` is
+> `sk-<generated-secret>`, the complete credential value is
+> `Bearer sk-<generated-secret>`, not just `sk-<generated-secret>`.
+
+Always send the webhook over HTTPS.
+
+## Docker Compose
+
+```yaml
+services:
+  n8n-discord-trigger:
+    image: skuldgerry/n8n-discord-trigger:2.0.0
+    container_name: n8n-discord-trigger
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: your_bot_token
+      WEBHOOK_URL: https://your-n8n-instance/webhook/discord
+      WEBHOOK_TOKEN: sk-replace-with-64-lowercase-hex-characters
+      WEBHOOK_TIMEOUT_SECONDS: "10"
+```
+
+Do not commit real token values to this repository or place them directly in a
+public Compose file. Use your deployment platform's secret management.
+
+## Discord setup
+
+1. Create an application and bot in the
+   [Discord Developer Portal](https://discord.com/developers/applications).
+2. Enable the **Message Content Intent** on the Bot page.
+3. Set `DISCORD_TOKEN`, `WEBHOOK_URL`, and `WEBHOOK_TOKEN`.
+4. Start the container.
+5. Use the invite link written to the container logs.
+
+The bot only needs **View Channels** for its trigger path. It does not need
+Administrator permission to determine whether the message author is an
+administrator.
+
+### Retrieve the invite URL
+
+At startup, the bot logs its invite URL and writes it to
+`/tmp/n8n-discord-trigger-invite-url.txt` inside the running container. This
+file remains available if old Docker log entries rotate away.
+
+Retrieve it at any time without restarting the bot:
+
+```bash
+docker exec n8n-discord-trigger \
+  cat /tmp/n8n-discord-trigger-invite-url.txt
+```
+
+With Docker Compose, the equivalent command is:
+
+```bash
+docker compose exec n8n-discord-trigger \
+  cat /tmp/n8n-discord-trigger-invite-url.txt
+```
+
+The invite URL contains the public Discord application ID, not the bot token.
+If the container is recreated, the bot writes the file again when it connects.
+
+## Payload
 
 ```json
 {
   "user": {
     "id": "1234567890",
     "username": "TestUser",
-    "discriminator": "1234",
-    "tag": "TestUser#1234"
+    "discriminator": "0",
+    "tag": "TestUser"
   },
   "content": "Hello there!",
   "original_content": "<@9876543210> Hello there!",
   "channel": {
     "id": "5432109876",
     "name": "general",
-    "type": "GuildText"
+    "type": "TextChannel"
   },
   "guild": {
     "id": "1111111111",
@@ -34,90 +123,31 @@ Here’s what the bot sends to your n8n webhook:
   },
   "message_id": "999888777",
   "message_link": "https://discord.com/channels/1111111111/5432109876/999888777",
-  "timestamp": "2025-07-26T20:50:00.000Z",
+  "timestamp": "2026-07-29T20:50:00+00:00",
   "source": "mention",
   "is_admin": true
 }
 ```
 
-## Docker Setup
+## Configuration
 
-The bot is available on Docker Hub:
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `DISCORD_TOKEN` | Yes | — | Discord bot token |
+| `WEBHOOK_URL` | Yes | — | Production n8n webhook URL |
+| `WEBHOOK_TOKEN` | Yes | — | `sk-` followed by exactly 64 lowercase hex characters |
+| `WEBHOOK_TIMEOUT_SECONDS` | No | `10` | Total HTTP request timeout |
+| `INVITE_URL_FILE` | No | `/tmp/n8n-discord-trigger-invite-url.txt` | File used to retain the public Discord invite URL |
+
+## Development
 
 ```bash
-docker pull skuldgerry/n8n-discord-trigger:1.0.0
+python3 -m unittest discover -s tests -v
 ```
 
-```yml
-services:
-  n8n-discord-trigger:
-    image: skuldgerry/n8n-discord-trigger:1.0.0
-    container_name: n8n-discord-trigger
-    restart: unless-stopped
-    environment:
-      - DISCORD_TOKEN=your_bot_token
-      - WEBHOOK_URL=https://your-n8n-instance/webhook/discord
-```
-
-After starting the container, check the console logs for the bot's invite link. You can use this link to invite the bot to your server with all required permissions.
-
-### Required Permissions
-
-The bot requires the following permissions to function properly:
-
-- Read Messages/View Channels
-- Send Messages
-- Read Message History
-- Use Slash Commands *(optional, for future use)*
-- Administrator *(required to correctly set the `is_admin` flag in the payload)*
-
-
-## How It Works
-
-- When a user **mentions the bot** in a server or sends a **direct message**, the bot captures:
-  - Message content
-  - User and guild information
-  - Whether the user is a Discord admin
-  - A message permalink
-- The bot sends this data to the `WEBHOOK_URL` you define as a POST request
-
-
-## Setup
-
-1. Create a Discord application and bot at [Discord Developer Portal](https://discord.com/developers/applications)
-2. Copy your bot token
-3. Deploy the bot using Docker Compose
-4. Invite the bot to your server using the invite link shown in the logs
-5. In n8n, create an POST HTTP Webhook trigger to receive and handle payloads
-
-
-
-## Use Cases
-
-- Trigger AI conversations in n8n from Discord
-- Control automation workflows via Discord messages
-- Personalize responses based on user context and permissions
-- Integrate chat-based workflows with memory and logic layers
-
----
-
-## ⚠️ Danger: Webhook Security Warning
-
-> **⚠️ This bot is intended to run in personal or internal environments only.**
-
-If you are deploying this bot in a **public cloud**, or if your `n8n` instance is **exposed to the internet**, please be aware of the following **security risk**:
-
-- The bot sends webhook payloads **without authentication** by default.
-- If someone discovers your webhook URL, they could **send arbitrary payloads** to your `n8n` workflows.
-- This could result in unauthorized actions, prompt injection, or even service abuse, depending on your workflow logic.
-
-## Built With AI
-
-This bot was built with the help of OpenAI’s GPT technology for rapid prototyping, debugging, and system design.
-
----
+See [CHANGELOG.md](CHANGELOG.md) for release history and
+[VERSIONING.md](VERSIONING.md) for the versioning policy.
 
 ## License
 
-This project is licensed under the MIT License.
-
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

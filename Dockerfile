@@ -2,9 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN useradd --create-home --uid 10001 bot
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY bot.py .
+COPY --chown=bot:bot bot.py invite.py trigger_logic.py webhook.py ./
 
-CMD ["python", "bot.py"]
+USER bot
+
+CMD ["python3", "bot.py"]

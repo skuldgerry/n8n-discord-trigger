@@ -1,60 +1,93 @@
-import os
+import asyncio
 import logging
+import os
+
+import aiohttp
 import discord
-import requests
-import json
 from discord.ext import commands
 from dotenv import load_dotenv
+
+from invite import build_invite_url, write_invite_url
+from trigger_logic import (
+    clean_message_content,
+    is_guild_admin,
+    should_trigger_message,
+)
+from webhook import build_auth_headers, post_webhook
+
+
+VERSION = "2.0.0"
 
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_TOKEN = os.getenv("WEBHOOK_TOKEN")
+INVITE_URL_FILE = os.getenv(
+    "INVITE_URL_FILE",
+    "/tmp/n8n-discord-trigger-invite-url.txt",
+)
+try:
+    WEBHOOK_TIMEOUT_SECONDS = float(
+        os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10")
+    )
+except ValueError:
+    WEBHOOK_TIMEOUT_SECONDS = None
 
-# Logging config
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
+    format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
-intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+webhook_session: aiohttp.ClientSession | None = None
+
 
 @bot.event
 async def on_ready():
-    logger.info(f"Bot is online as {bot.user} (ID: {bot.user.id})")
-    invite_link = (
-        f"https://discord.com/oauth2/authorize?"
-        f"client_id={bot.user.id}&permissions=277025508352&scope=bot%20applications.commands"
+    logger.info(
+        "n8n Discord Trigger %s is online as %s (ID: %s)",
+        VERSION,
+        bot.user,
+        bot.user.id,
     )
-    logger.info(f"Invite the bot using this link:\n{invite_link}")
+    invite_link = build_invite_url(bot.user.id)
+    logger.info("Invite the bot using this link:\n%s", invite_link)
+    try:
+        destination = write_invite_url(INVITE_URL_FILE, invite_link)
+        logger.info("Invite URL saved to %s", destination)
+    except OSError as error:
+        logger.warning(
+            "Could not save invite URL to %s: %s",
+            INVITE_URL_FILE,
+            type(error).__name__,
+        )
+
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    logger.info(f"Received message from {message.author} in {message.channel}: {message.content}")
-
     is_dm = isinstance(message.channel, discord.DMChannel)
-    is_mention = bot.user.mentioned_in(message)
 
-    if not (is_dm or is_mention):
+    if not should_trigger_message(message, bot.user.id, is_dm=is_dm):
         return
 
-    logger.info("Message triggered the webhook")
+    source = "dm" if is_dm else "mention"
+    logger.info(
+        "Webhook triggered: source=%s user_id=%s channel_id=%s message_id=%s",
+        source,
+        message.author.id,
+        message.channel.id,
+        message.id,
+    )
 
-    # Remove mention if it exists
-    mention_text = f"<@{bot.user.id}>"
-    clean_content = message.content.replace(mention_text, "").strip()
-
-    # Build payload
     payload = {
         "user": {
             "id": str(message.author.id),
@@ -62,7 +95,7 @@ async def on_message(message):
             "discriminator": message.author.discriminator,
             "tag": str(message.author),
         },
-        "content": clean_content,
+        "content": clean_message_content(message.content, bot.user.id),
         "original_content": message.content,
         "channel": {
             "id": str(message.channel.id),
@@ -76,25 +109,86 @@ async def on_message(message):
         "message_id": str(message.id),
         "message_link": message.jump_url if message.guild else None,
         "timestamp": message.created_at.isoformat(),
-        "source": "mention" if is_mention else "dm",
-        "is_admin": (
-            any(r.permissions.administrator for r in getattr(message.author, "roles", []))
-            if message.guild else False
-        ),
+        "source": source,
+        "is_admin": is_guild_admin(message.author, message.guild),
     }
 
-    logger.info(f"Payload:\n{json.dumps(payload, indent=2)}")
-
     try:
-        response = requests.post(WEBHOOK_URL, json=payload)
-        logger.info(f"Webhook response status: {response.status_code}")
-    except Exception as e:
-        logger.error(f"Failed to send webhook: {e}")
+        if webhook_session is None:
+            raise RuntimeError("Webhook session is not initialized")
+
+        status = await post_webhook(
+            webhook_session,
+            WEBHOOK_URL,
+            WEBHOOK_TOKEN,
+            payload,
+        )
+        logger.info(
+            "Webhook delivered: status=%s message_id=%s",
+            status,
+            message.id,
+        )
+    except aiohttp.ClientResponseError as error:
+        logger.error(
+            "Webhook rejected: status=%s message_id=%s",
+            error.status,
+            message.id,
+        )
+    except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+        logger.error(
+            "Webhook delivery failed for message_id=%s: %s",
+            message.id,
+            type(error).__name__,
+        )
 
     await bot.process_commands(message)
 
+
+def validate_configuration() -> list[str]:
+    required = {
+        "DISCORD_TOKEN": DISCORD_TOKEN,
+        "WEBHOOK_URL": WEBHOOK_URL,
+        "WEBHOOK_TOKEN": WEBHOOK_TOKEN,
+    }
+    errors = [
+        f"{name} is not set"
+        for name, value in required.items()
+        if not value
+    ]
+
+    if WEBHOOK_TOKEN:
+        try:
+            build_auth_headers(WEBHOOK_TOKEN)
+        except ValueError as error:
+            errors.append(str(error))
+
+    if (
+        WEBHOOK_TIMEOUT_SECONDS is None
+        or WEBHOOK_TIMEOUT_SECONDS <= 0
+    ):
+        errors.append("WEBHOOK_TIMEOUT_SECONDS must be greater than zero")
+
+    return errors
+
+
+async def main():
+    global webhook_session
+
+    configuration_errors = validate_configuration()
+    if configuration_errors:
+        logger.error(
+            "Invalid configuration: %s",
+            "; ".join(configuration_errors),
+        )
+        raise SystemExit(1)
+
+    timeout = aiohttp.ClientTimeout(total=WEBHOOK_TIMEOUT_SECONDS)
+    async with aiohttp.ClientSession(timeout=timeout) as webhook_session:
+        await bot.start(DISCORD_TOKEN)
+
+
 if __name__ == "__main__":
-    if not DISCORD_TOKEN or not WEBHOOK_URL:
-        logger.error("DISCORD_TOKEN and/or WEBHOOK_URL are not set.")
-        exit(1)
-    bot.run(DISCORD_TOKEN)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
