@@ -12,6 +12,14 @@ TOKEN_PATTERN = re.compile(
 )
 
 
+class WebhookDeliveryError(Exception):
+    """A webhook response did not confirm successful delivery."""
+
+    def __init__(self, status: int):
+        self.status = status
+        super().__init__(f"Webhook returned non-success HTTP status {status}")
+
+
 def build_auth_headers(token: str) -> Mapping[str, str]:
     """Build the required n8n Authorization Bearer header."""
 
@@ -38,6 +46,9 @@ async def post_webhook(
         url,
         json=payload,
         headers=build_auth_headers(token),
+        allow_redirects=False,
     ) as response:
         response.raise_for_status()
+        if not 200 <= response.status < 300:
+            raise WebhookDeliveryError(response.status)
         return response.status

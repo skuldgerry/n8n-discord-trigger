@@ -12,7 +12,10 @@ mentioned in a server or sent a direct message.
 
 ## n8n authentication
 
-Version 2.0.0 requires an Authorization Bearer token on every webhook request.
+Version 2.0.0 and later require an Authorization Bearer token on every webhook request.
+
+Only HTTP 2xx responses confirm delivery. Redirects are rejected: configure
+`WEBHOOK_URL` with the final HTTPS webhook endpoint, not a login or redirect URL.
 
 Generate a 256-bit token in the required `sk-` format:
 
@@ -51,7 +54,7 @@ Always send the webhook over HTTPS.
 ```yaml
 services:
   n8n-discord-trigger:
-    image: skuldgerry/n8n-discord-trigger:2.0.0
+    image: skuldgerry/n8n-discord-trigger:2.0.1
     container_name: n8n-discord-trigger
     restart: unless-stopped
     environment:

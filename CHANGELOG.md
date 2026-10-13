@@ -7,6 +7,16 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-13
+
+### Fixed
+
+- Reject webhook redirects instead of following them and potentially reporting
+  a login page as a successful delivery.
+- Confirm delivery only for HTTP 2xx responses; report other statuses as failures.
+- Add regression coverage for real HTTP redirects, unsuccessful responses,
+  authenticated payload delivery, and bot delivery logging.
+
 ## [2.0.0] - 2026-07-29
 
 ### Added
