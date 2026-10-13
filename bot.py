@@ -13,10 +13,10 @@ from trigger_logic import (
     is_guild_admin,
     should_trigger_message,
 )
-from webhook import build_auth_headers, post_webhook
+from webhook import WebhookDeliveryError, build_auth_headers, post_webhook
 
 
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 
 load_dotenv()
 
@@ -128,7 +128,7 @@ async def on_message(message):
             status,
             message.id,
         )
-    except aiohttp.ClientResponseError as error:
+    except (aiohttp.ClientResponseError, WebhookDeliveryError) as error:
         logger.error(
             "Webhook rejected: status=%s message_id=%s",
             error.status,

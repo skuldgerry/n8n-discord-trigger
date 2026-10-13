@@ -4,6 +4,7 @@ from webhook import (
     AUTH_HEADER,
     TOKEN_PREFIX,
     TOKEN_SECRET_HEX_LENGTH,
+    WebhookDeliveryError,
     build_auth_headers,
     post_webhook,
 )
@@ -95,6 +96,24 @@ class WebhookTests(unittest.IsolatedAsyncioTestCase):
             {AUTH_HEADER: f"Bearer {VALID_TOKEN}"},
         )
         self.assertNotIn(VALID_TOKEN, session.request["json"].values())
+        self.assertFalse(session.request["allow_redirects"])
+
+    async def test_only_2xx_responses_confirm_delivery(self):
+        for status in (200, 201, 202, 204, 299):
+            with self.subTest(status=status):
+                session = FakeSession(FakeResponse(status=status))
+                self.assertEqual(
+                    await post_webhook(session, "https://n8n.example/webhook/discord", VALID_TOKEN, {}),
+                    status,
+                )
+
+    async def test_non_success_responses_are_rejected(self):
+        for status in (199, 300, 301, 302, 303, 304, 307, 308, 399):
+            with self.subTest(status=status):
+                session = FakeSession(FakeResponse(status=status))
+                with self.assertRaises(WebhookDeliveryError) as raised:
+                    await post_webhook(session, "https://n8n.example/webhook/discord", VALID_TOKEN, {})
+                self.assertEqual(raised.exception.status, status)
 
     async def test_http_error_is_not_treated_as_success(self):
         session = FakeSession(
