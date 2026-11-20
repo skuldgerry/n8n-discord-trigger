@@ -16,7 +16,7 @@ from trigger_logic import (
 from webhook import WebhookDeliveryError, build_auth_headers, post_webhook
 
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 
 load_dotenv()
 

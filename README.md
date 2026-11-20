@@ -54,7 +54,7 @@ Always send the webhook over HTTPS.
 ```yaml
 services:
   n8n-discord-trigger:
-    image: skuldgerry/n8n-discord-trigger:2.0.1
+    image: skuldgerry/n8n-discord-trigger:2.0.2
     container_name: n8n-discord-trigger
     restart: unless-stopped
     environment:
