@@ -7,6 +7,14 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-11-20
+
+### Changed
+
+- Update `aiohttp` from 3.14.3 to 3.14.5 for HTTP and WebSocket fixes.
+- Run the HTTP delivery and Discord trigger regression suite on Python 3.11
+  and 3.12 in GitHub Actions.
+
 ## [2.0.1] - 2026-10-13
 
 ### Fixed
