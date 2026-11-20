@@ -1,0 +1,43 @@
+name: Functional tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - dependabot/pip/aiohttp-3.14.4
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python }} HTTP and Discord fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install pinned dependencies
+        run: python -m pip install --only-binary=:all: -r requirements.txt
+      - name: Check dependency compatibility
+        run: python -m pip check
+      - name: Record interpreter and dependency versions
+        run: |
+          python --version
+          python -m pip freeze
+      - name: Run unit and functional tests
+        env:
+          DISCORD_TOKEN: fixture-not-a-real-discord-token
+          WEBHOOK_URL: https://example.invalid/unused
+          WEBHOOK_TOKEN: sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        run: python -m unittest discover -s tests -v
